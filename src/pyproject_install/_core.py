@@ -5,6 +5,7 @@ from collections.abc import Mapping, Sequence
 import json
 import os
 import subprocess
+import shutil
 import sys
 from typing import Any, BinaryIO
 
@@ -90,8 +91,8 @@ def main(argv: Sequence[str] | None = None):
     )
     parser.add_argument(
         "--interpreter",
-        default=sys.executable,
-        help="path of Python interpreter; defaults to running interpreter",
+        default=shutil.which("python"),
+        help="path of Python interpreter; defaults to `which python`",
     )
     parser.add_argument(
         "--prefix",
