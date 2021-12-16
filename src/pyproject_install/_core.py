@@ -121,13 +121,13 @@ def main(argv: Sequence[str] | None = None):
 
     args = parser.parse_args(argv)
 
-    with WheelFile.open(args.wheel) as wheel:
-        runtime_metadata = extract_python_runtime_metadata(args.interpreter, args.prefix)
-        if not runtime_metadata["in_venv"] and args.prefix is None:
-            raise ValueError(
-                "Attempted installation at base prefix; aborting.  Pass `--prefix` to override"
-            )
+    runtime_metadata = extract_python_runtime_metadata(args.interpreter, args.prefix)
+    if not runtime_metadata["in_venv"] and args.prefix is None:
+        raise ValueError(
+            "Attempted installation at base prefix; aborting.  Pass `--prefix` to override"
+        )
 
+    with WheelFile.open(args.wheel) as wheel:
         scheme = generate_wheel_scheme(
             runtime_metadata,
             args.wheel,
