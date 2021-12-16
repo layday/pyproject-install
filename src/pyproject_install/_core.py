@@ -27,20 +27,24 @@ import json
 import sys
 import sysconfig
 
-get_paths = sysconfig.get_paths
-path_vars = {}
-if path_vars is not None:
+in_venv = sys.prefix != sys.base_prefix
+
+path_prefixes = {}
+if path_prefixes is not None:
     # Apple framework builds don't use a common prefix
-    if "osx_framework_library" in sysconfig.get_scheme_names():
-        get_paths = partial(get_paths, scheme="posix_prefix")
-    get_paths = partial(get_paths, vars=path_vars)
+    if not in_venv and "osx_framework_library" in sysconfig.get_scheme_names():
+        raise ValueError("Cannot override Apple framework prefix")
+
+    paths = sysconfig.get_paths(vars=path_prefixes)
+else:
+    paths = sysconfig.get_paths()
 
 print(
     json.dumps(
         {{
             "prefix": sys.prefix,
-            "in_venv": sys.prefix != sys.base_prefix,
-            "paths": get_paths(),
+            "in_venv": in_venv,
+            "paths": paths,
         }}
     )
 )
