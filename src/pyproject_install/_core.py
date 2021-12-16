@@ -4,8 +4,8 @@ import argparse
 from collections.abc import Mapping, Sequence
 import json
 import os
-import subprocess
 import shutil
+import subprocess
 import sys
 from typing import Any, BinaryIO
 
