@@ -1,0 +1,62 @@
+---
+name: CI
+on: [push, pull_request]
+env:
+  FORCE_COLOR: "1"
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+        python-version:
+          - "3.7"
+          - "3.8"
+          - "3.9"
+          - "3.10"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Clone the repo
+        uses: actions/checkout@v2
+      - name: Install Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-install-version || matrix.python-version }}
+      - name: Install nox
+        run: pipx install nox
+      - name: Run tests
+        run: nox --non-interactive -s test
+          -p ${{ matrix.python-version }} --error-on-missing-interpreters
+  type-check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+        python-version: ["3.7", "3.10"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Clone the repo
+        uses: actions/checkout@v2
+      - name: Install Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-install-version || matrix.python-version }}
+      - name: Install nox
+        run: pipx install nox
+      - name: Install Node 16 for Pyright
+        uses: actions/setup-node@v2
+        with:
+          node-version: "16"
+      - name: Type check
+        run: >-
+          nox --non-interactive -s type_check
+          -p ${{ matrix.python-version }} --error-on-missing-interpreters
+  check-formatting:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the repo
+        uses: actions/checkout@v2
+      - name: Install nox
+        run: pipx install nox
+      - name: Check code formatting
+        run: nox -s format -- --check
