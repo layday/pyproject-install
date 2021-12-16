@@ -22,31 +22,52 @@ from installer.utils import (
 from . import __version__
 
 runtime_metadata_script = """\
+from functools import partial
 import json
 import sys
 import sysconfig
 
+get_paths = sysconfig.get_paths
+path_vars = {}
+if path_vars is not None:
+    # Apple framework builds don't use a common prefix
+    if "osx_framework_library" in sysconfig.get_scheme_names():
+        get_paths = partial(get_paths, scheme="posix_prefix")
+    get_paths = partial(get_paths, vars=path_vars)
+
 print(
     json.dumps(
-        {
+        {{
             "prefix": sys.prefix,
             "in_venv": sys.prefix != sys.base_prefix,
-            "paths": sysconfig.get_paths(),
-        }
+            "paths": get_paths(),
+        }}
     )
 )
 """
 
 
-def extract_python_runtime_metadata(interpreter: str) -> dict[str, Any]:
-    return json.loads(subprocess.check_output([interpreter, "-Ic", runtime_metadata_script]))
+def extract_python_runtime_metadata(
+    interpreter: str,
+    custom_prefix: str | None,
+) -> dict[str, Any]:
+    script = runtime_metadata_script.format(
+        {
+            "installed_base": custom_prefix,
+            "base": custom_prefix,
+            "installed_platbase": custom_prefix,
+            "platbase": custom_prefix,
+        }
+        if custom_prefix is not None
+        else None
+    )
+    return json.loads(subprocess.check_output([interpreter, "-Ic", script]))
 
 
 def generate_wheel_scheme(
     runtime_metadata: Mapping[str, Any],
     wheel_filename: str,
     wheel_is_pure: bool,
-    custom_prefix: str | None,
 ):
     scheme: dict[str, str] = {
         d: p for d, p in runtime_metadata["paths"].items() if d in SCHEME_NAMES
@@ -56,11 +77,6 @@ def generate_wheel_scheme(
         scheme["headers"] = os.path.join(
             runtime_metadata["paths"]["include" if wheel_is_pure else "platinclude"], distribution
         )
-    if custom_prefix is not None and custom_prefix != runtime_metadata["prefix"]:
-        scheme = {
-            d: os.path.join(custom_prefix, os.path.relpath(p, runtime_metadata["prefix"]))
-            for d, p in scheme.items()
-        }
     return scheme
 
 
@@ -106,7 +122,7 @@ def main(argv: Sequence[str] | None = None):
     args = parser.parse_args(argv)
 
     with WheelFile.open(args.wheel) as wheel:
-        runtime_metadata = extract_python_runtime_metadata(args.interpreter)
+        runtime_metadata = extract_python_runtime_metadata(args.interpreter, args.prefix)
         if not runtime_metadata["in_venv"] and args.prefix is None:
             raise ValueError(
                 "Attempted installation at base prefix; aborting.  Pass `--prefix` to override"
@@ -116,7 +132,6 @@ def main(argv: Sequence[str] | None = None):
             runtime_metadata,
             args.wheel,
             is_wheel_pure(wheel),
-            args.prefix,
         )
         destination = CustomSchemeDictionaryDestination(
             scheme,
