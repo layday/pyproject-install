@@ -22,7 +22,6 @@ from installer.utils import (
 from . import __version__
 
 runtime_metadata_script = """\
-from functools import partial
 import json
 import sys
 import sysconfig
