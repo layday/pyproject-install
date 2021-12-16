@@ -78,7 +78,7 @@ class CustomSchemeDictionaryDestination(SchemeDictionaryDestination):
         if self._in_venv and scheme == "headers":
             print(f"Skipping header file '{path}'", file=sys.stderr)
         else:
-            super().write_to_fs(scheme, path, stream)
+            super().write_file(scheme, path, stream)
 
 
 def main(argv: Sequence[str] | None = None):
