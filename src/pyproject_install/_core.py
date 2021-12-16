@@ -42,7 +42,6 @@ else:
 print(
     json.dumps(
         {{
-            "prefix": sys.prefix,
             "in_venv": in_venv,
             "paths": paths,
         }}
