@@ -7,17 +7,22 @@ Command-line Python wheel installer utilising
 Usage
 -----
 
-    $ pyproject-install --help
-    usage: pyproject-install [-h] [--version] [--interpreter INTERPRETER] [--prefix PREFIX] wheel
+.. code-block::
 
-    Python wheel installer for the masses
+   $ pyproject-install --help
+   usage: pyproject-install [-h] [--verbose] [--version] [--interpreter INTERPRETER]
+                            [--prefix PREFIX]
+                            wheel
 
-    positional arguments:
-      wheel                 wheel file to install
+   Python wheel installer for the masses
 
-    optional arguments:
-      -h, --help            show this help message and exit
-      --version             show program's version number and exit
-      --interpreter INTERPRETER
-                            path of Python interpreter; defaults to running interpreter
-      --prefix PREFIX       custom installation prefix
+   positional arguments:
+     wheel                 wheel file to install
+
+   optional arguments:
+     -h, --help            show this help message and exit
+     --verbose             increase verbosity
+     --version             show program's version number and exit
+     --interpreter INTERPRETER
+                           path of Python interpreter; defaults to `which python`
+     --prefix PREFIX       custom installation prefix
