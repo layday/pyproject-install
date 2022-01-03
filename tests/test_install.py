@@ -149,3 +149,19 @@ def test_header_file_skipped_reported(
         ]
     )
     assert capsys.readouterr().err.endswith("Skipping headers file: 'foo.h'\n")
+
+
+def test_verbosity_flag(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture,
+    fake_wheel: str,
+):
+    core.main(
+        [
+            "--verbose",
+            "--prefix",
+            str(tmp_path),
+            fake_wheel,
+        ]
+    )
+    assert capsys.readouterr().err.startswith("Runtime metadata:")

@@ -18,6 +18,14 @@ from installer.utils import SCHEME_NAMES, parse_metadata_file, parse_wheel_filen
 
 from . import __version__
 
+LOGGING_ENABLED = False
+
+
+def log(message: str):
+    if LOGGING_ENABLED:
+        print(message, file=sys.stderr)
+
+
 runtime_metadata_script = """\
 import json
 import os
@@ -130,11 +138,17 @@ class CustomSchemeDictionaryDestination(SchemeDictionaryDestination):
         if scheme in self._skip_schemes:
             print(f"Skipping {scheme} file: '{path}'", file=sys.stderr)
         else:
+            log(f"Writing {scheme} file: '{path}'")
             super().write_file(scheme, path, stream)
 
 
 def main(argv: Sequence[str] | None = None):
     parser = argparse.ArgumentParser(description="Python wheel installer for the masses")
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="increase verbosity",
+    )
     parser.add_argument(
         "--version",
         action="version",
@@ -156,11 +170,15 @@ def main(argv: Sequence[str] | None = None):
 
     args = parser.parse_args(argv)
 
+    if args.verbose:
+        global LOGGING_ENABLED
+        LOGGING_ENABLED = True
+
     runtime_metadata = extract_python_runtime_metadata(args.interpreter, args.prefix)
 
-    print("Runtime metadata:", file=sys.stderr)
-    print(textwrap.indent(pprint.pformat(runtime_metadata), "  "), file=sys.stderr)
-    print("", file=sys.stderr)
+    log("Runtime metadata:")
+    log(textwrap.indent(pprint.pformat(runtime_metadata), "  "))
+    log("")
 
     validate_runtime_metadata(runtime_metadata, args.prefix)
 
@@ -171,9 +189,9 @@ def main(argv: Sequence[str] | None = None):
             is_wheel_pure(wheel),
         )
 
-        print("Scheme:", file=sys.stderr)
-        print(textwrap.indent(pprint.pformat(scheme), "  "), file=sys.stderr)
-        print("", file=sys.stderr)
+        log("Scheme:")
+        log(textwrap.indent(pprint.pformat(scheme), "  "))
+        log("")
 
         destination = CustomSchemeDictionaryDestination(
             scheme,
