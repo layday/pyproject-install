@@ -141,6 +141,10 @@ class CustomSchemeDictionaryDestination(SchemeDictionaryDestination):
             log(f"Writing {scheme} file: '{path}'")
             super().write_file(scheme, path, stream)
 
+    def write_script(self, name: str, module: str, attr: str, section: str):  # pragma: no cover
+        log(f"Writing script: '{name}'")
+        super().write_script(name, module, attr, section)
+
 
 def main(argv: Sequence[str] | None = None):
     parser = argparse.ArgumentParser(description="Python wheel installer for the masses")
