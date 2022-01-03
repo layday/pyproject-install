@@ -4,9 +4,11 @@ import argparse
 from collections.abc import Mapping, Sequence
 import json
 import os
+import pprint
 import shutil
 import subprocess
 import sys
+import textwrap
 from typing import Any, BinaryIO
 
 from installer import install
@@ -56,7 +58,8 @@ print(
 
 
 class Skip(str):
-    pass
+    def __repr__(self):
+        return "<Skip>"
 
 
 SKIP = Skip()
@@ -154,6 +157,11 @@ def main(argv: Sequence[str] | None = None):
     args = parser.parse_args(argv)
 
     runtime_metadata = extract_python_runtime_metadata(args.interpreter, args.prefix)
+
+    print("Runtime metadata:", file=sys.stderr)
+    print(textwrap.indent(pprint.pformat(runtime_metadata), "  "), file=sys.stderr)
+    print("", file=sys.stderr)
+
     validate_runtime_metadata(runtime_metadata, args.prefix)
 
     with WheelFile.open(args.wheel) as wheel:
@@ -162,6 +170,11 @@ def main(argv: Sequence[str] | None = None):
             args.wheel,
             is_wheel_pure(wheel),
         )
+
+        print("Scheme:", file=sys.stderr)
+        print(textwrap.indent(pprint.pformat(scheme), "  "), file=sys.stderr)
+        print("", file=sys.stderr)
+
         destination = CustomSchemeDictionaryDestination(
             scheme,
             interpreter=args.interpreter,
