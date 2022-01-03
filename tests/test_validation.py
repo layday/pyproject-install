@@ -6,7 +6,7 @@ import pytest
 from pyproject_install import _core as core
 
 
-def test_cannot_use_custom_prefix_with_apple_framework_build():
+def test_cannot_use_custom_prefix_with_unoverridable_paths():
     prefix = os.path.realpath("/foo")
     metadata = core.extract_python_runtime_metadata(sys.executable, prefix)
     metadata["paths"]["headers"] = os.path.realpath("/bar")

@@ -109,8 +109,8 @@ def validate_runtime_metadata(runtime_metadata: Mapping[str, Any], prefix: str |
     if prefix is not None:
         unoverridable_paths = [
             p
-            for d, p in runtime_metadata["paths"].items()
-            if d in SCHEME_NAMES and os.path.commonpath([prefix, p]) != prefix
+            for p in runtime_metadata["paths"].values()
+            if os.path.commonpath([prefix, p]) != prefix
         ]
         if unoverridable_paths:
             raise ValueError("Scheme contains unoverridable paths", unoverridable_paths)
