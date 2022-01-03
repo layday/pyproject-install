@@ -148,4 +148,4 @@ def test_header_file_skipped_reported(
             fake_wheel_with_header_file,
         ]
     )
-    assert capsys.readouterr().err == "Skipping header file 'foo.h'\n"
+    assert capsys.readouterr().err == "Skipping headers file: 'foo.h'\n"

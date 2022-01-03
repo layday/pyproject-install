@@ -12,28 +12,33 @@ from typing import Any, BinaryIO
 from installer import install
 from installer.destinations import SchemeDictionaryDestination
 from installer.sources import WheelFile
-from installer.utils import (
-    SCHEME_NAMES,
-    get_launcher_kind,
-    parse_metadata_file,
-    parse_wheel_filename,
-)
+from installer.utils import SCHEME_NAMES, parse_metadata_file, parse_wheel_filename
 
 from . import __version__
 
 runtime_metadata_script = """\
 import json
+import os
 import sys
 import sysconfig
 
+
 in_venv = sys.prefix != sys.base_prefix
+
+launcher_kind = None
+if os.name != "nt":
+    launcher_kind = "posix"
+if "amd64" in sys.version.lower():
+    launcher_kind = "win-amd64"
+if "(arm64)" in sys.version.lower():
+    launcher_kind = "win-arm64"
+if "(arm)" in sys.version.lower():
+    launcher_kind = "win-arm"
+if sys.platform == "win32":
+    launcher_kind = "win-ia32"
 
 path_prefixes = {}
 if path_prefixes is not None:
-    # Apple framework builds don't use a common prefix
-    if not in_venv and "osx_framework_library" in sysconfig.get_scheme_names():
-        raise ValueError("Cannot override Apple framework prefix")
-
     paths = sysconfig.get_paths(vars=path_prefixes)
 else:
     paths = sysconfig.get_paths()
@@ -43,10 +48,18 @@ print(
         {{
             "in_venv": in_venv,
             "paths": paths,
-        }}
+            "launcher_kind": launcher_kind,
+        }},
     )
 )
 """
+
+
+class Skip(str):
+    pass
+
+
+SKIP = Skip()
 
 
 def extract_python_runtime_metadata(
@@ -74,7 +87,9 @@ def generate_wheel_scheme(
     scheme: dict[str, str] = {
         d: p for d, p in runtime_metadata["paths"].items() if d in SCHEME_NAMES
     }
-    if not runtime_metadata["in_venv"]:
+    if runtime_metadata["in_venv"]:
+        scheme["headers"] = SKIP
+    else:
         distribution = parse_wheel_filename(wheel_filename).distribution
         scheme["headers"] = os.path.join(
             runtime_metadata["paths"]["include" if wheel_is_pure else "platinclude"], distribution
@@ -88,14 +103,29 @@ def is_wheel_pure(wheel_file: WheelFile):
     return metadata["Root-Is-Purelib"] == "true"
 
 
+def validate_runtime_metadata(runtime_metadata: Mapping[str, Any], prefix: str | None):
+    if prefix is None and not runtime_metadata["in_venv"]:
+        raise ValueError("Attempted installation at base prefix.  Pass `--prefix` to override")
+    if prefix is not None:
+        unoverridable_paths = [
+            p
+            for d, p in runtime_metadata["paths"].items()
+            if d in SCHEME_NAMES and os.path.commonpath([prefix, p]) != prefix
+        ]
+        if unoverridable_paths:
+            raise ValueError("Scheme contains unoverridable paths", unoverridable_paths)
+    if not runtime_metadata["launcher_kind"]:
+        raise ValueError("Could not extract launcher kind")
+
+
 class CustomSchemeDictionaryDestination(SchemeDictionaryDestination):
-    def __init__(self, *args: Any, in_venv: bool, **kwargs: Any):
-        self._in_venv = in_venv
+    def __init__(self, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
+        self._skip_schemes = frozenset(s for s, v in self.scheme_dict.items() if v is SKIP)
 
     def write_file(self, scheme: str, path: str | os.PathLike[str], stream: BinaryIO):
-        if self._in_venv and scheme == "headers":
-            print(f"Skipping header file '{path}'", file=sys.stderr)
+        if scheme in self._skip_schemes:
+            print(f"Skipping {scheme} file: '{path}'", file=sys.stderr)
         else:
             super().write_file(scheme, path, stream)
 
@@ -124,10 +154,7 @@ def main(argv: Sequence[str] | None = None):
     args = parser.parse_args(argv)
 
     runtime_metadata = extract_python_runtime_metadata(args.interpreter, args.prefix)
-    if not runtime_metadata["in_venv"] and args.prefix is None:
-        raise ValueError(
-            "Attempted installation at base prefix; aborting.  Pass `--prefix` to override"
-        )
+    validate_runtime_metadata(runtime_metadata, args.prefix)
 
     with WheelFile.open(args.wheel) as wheel:
         scheme = generate_wheel_scheme(
@@ -137,9 +164,8 @@ def main(argv: Sequence[str] | None = None):
         )
         destination = CustomSchemeDictionaryDestination(
             scheme,
-            in_venv=runtime_metadata["in_venv"],
             interpreter=args.interpreter,
-            script_kind=get_launcher_kind(),
+            script_kind=runtime_metadata["launcher_kind"],
         )
         install(
             wheel,

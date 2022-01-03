@@ -6,7 +6,7 @@ import sys
 import sysconfig
 import venv
 
-import pytest
+from installer.utils import SCHEME_NAMES
 
 from pyproject_install import _core as core
 
@@ -23,7 +23,7 @@ def test_generate_paths_outside_venv(
         "foo-0.0.0-py3-none-any.whl",
         True,
     )
-    assert paths.keys() == {"purelib", "platlib", "scripts", "data", "headers"}
+    assert paths.keys() == set(SCHEME_NAMES)
     assert all(paths[s] == base_paths[s] for s in {"purelib", "platlib", "scripts", "data"})
     assert paths["headers"] == os.path.join(base_paths["include"], "foo")
 
@@ -43,14 +43,9 @@ def test_generate_paths_inside_venv(
         "foo-0.0.0-py3.none.any.whl",
         True,
     )
-    assert paths.keys() == {"purelib", "platlib", "scripts", "data"}
-    assert all(os.path.commonpath([p, tmp_path]) == str(tmp_path) for p in paths.values())
-
-
-def test_cannot_use_custom_prefix_with_apple_framework_build(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    monkeypatch.setattr("sys.base_prefix", sys.prefix)
-    monkeypatch.setattr("sysconfig.get_scheme_names", lambda: ("osx_framework_library",))
-    with pytest.raises(ValueError, match="Cannot override Apple framework prefix"):
-        exec(core.runtime_metadata_script.format({}))
+    assert paths.keys() == set(SCHEME_NAMES)
+    assert all(
+        os.path.commonpath([paths[s], tmp_path]) == str(tmp_path)
+        for s in {"purelib", "platlib", "scripts", "data"}
+    )
+    assert paths["headers"] is core.SKIP
