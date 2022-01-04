@@ -14,15 +14,18 @@ from typing import Any, BinaryIO
 from installer import install
 from installer.destinations import SchemeDictionaryDestination
 from installer.sources import WheelFile
-from installer.utils import SCHEME_NAMES, parse_metadata_file, parse_wheel_filename
+from installer.utils import parse_metadata_file, parse_wheel_filename
 
 from . import __version__
+
+COMMON_SCHEME_NAMES = frozenset({"purelib", "platlib", "scripts", "data"})
+DISPARATE_SCHEME_NAMES = frozenset({"include", "platinclude"})
 
 LOGGING_ENABLED = False
 
 
-def log(message: str):
-    if LOGGING_ENABLED:
+def log(message: str, always: bool = False):
+    if always or LOGGING_ENABLED:
         print(message, file=sys.stderr)
 
 
@@ -47,19 +50,20 @@ if "(arm)" in sys.version.lower():
 if sys.platform == "win32":
     launcher_kind = "win-ia32"
 
-path_prefixes = {}
-if path_prefixes is not None:
-    paths = sysconfig.get_paths(vars=path_prefixes)
+if hasattr(sysconfig, "get_default_scheme"):
+    scheme = sysconfig.get_default_scheme()
 else:
-    paths = sysconfig.get_paths()
+    scheme = sysconfig._get_default_scheme()
 
 print(
     json.dumps(
-        {{
+        {
+            "prefix": sys.prefix,
             "in_venv": in_venv,
-            "paths": paths,
+            "scheme": scheme,
+            "paths": sysconfig.get_paths(),
             "launcher_kind": launcher_kind,
-        }},
+        },
     )
 )
 """
@@ -67,44 +71,42 @@ print(
 
 class Skip(str):
     def __repr__(self):
-        return "<Skip>"
+        return f"<Skip: {self}>"
 
 
-SKIP = Skip()
+SKIP_VENV_HEADERS = Skip("There is no standard location for headers in a venv")
 
 
-def extract_python_runtime_metadata(
-    interpreter: str,
-    custom_prefix: str | None,
-) -> dict[str, Any]:
-    script = runtime_metadata_script.format(
-        {
-            "installed_base": custom_prefix,
-            "base": custom_prefix,
-            "installed_platbase": custom_prefix,
-            "platbase": custom_prefix,
-        }
-        if custom_prefix is not None
-        else None
-    )
-    return json.loads(subprocess.check_output([interpreter, "-Ic", script]))
+def extract_python_runtime_metadata(interpreter: str) -> dict[str, Any]:
+    return json.loads(subprocess.check_output([interpreter, "-Ic", runtime_metadata_script]))
 
 
 def generate_wheel_scheme(
     runtime_metadata: Mapping[str, Any],
+    prefix: str | None,
     wheel_filename: str,
     wheel_is_pure: bool,
 ):
-    scheme: dict[str, str] = {
-        d: p for d, p in runtime_metadata["paths"].items() if d in SCHEME_NAMES
-    }
+    base_paths: Mapping[str, str] = runtime_metadata["paths"]
+
+    scheme = {d: p for d, p in base_paths.items() if d in COMMON_SCHEME_NAMES}
+    if prefix is not None:
+        scheme = {
+            d: os.path.join(prefix, os.path.relpath(p, runtime_metadata["prefix"]))
+            for d, p in scheme.items()
+        }
+
     if runtime_metadata["in_venv"]:
-        scheme["headers"] = SKIP
+        scheme["headers"] = SKIP_VENV_HEADERS
     else:
+        include_path = base_paths["include" if wheel_is_pure else "platinclude"]
+        if prefix is not None:
+            include_path = os.path.join(
+                prefix, os.path.relpath(include_path, runtime_metadata["prefix"])
+            )
         distribution = parse_wheel_filename(wheel_filename).distribution
-        scheme["headers"] = os.path.join(
-            runtime_metadata["paths"]["include" if wheel_is_pure else "platinclude"], distribution
-        )
+        scheme["headers"] = os.path.join(include_path, distribution)
+
     return scheme
 
 
@@ -114,29 +116,34 @@ def is_wheel_pure(wheel_file: WheelFile):
     return metadata["Root-Is-Purelib"] == "true"
 
 
-def validate_runtime_metadata(runtime_metadata: Mapping[str, Any], prefix: str | None):
-    if prefix is None and not runtime_metadata["in_venv"]:
+def validate_runtime_metadata(runtime_metadata: Mapping[str, Any], custom_prefix: bool):
+    if not runtime_metadata["launcher_kind"]:
+        raise ValueError("Could not determine launcher kind")
+    if not custom_prefix and not runtime_metadata["in_venv"]:
         raise ValueError("Attempted installation at base prefix.  Pass `--prefix` to override")
-    if prefix is not None:
+    if custom_prefix:
         unoverridable_paths = [
             p
-            for p in runtime_metadata["paths"].values()
-            if os.path.commonpath([prefix, p]) != prefix
+            for d, p in runtime_metadata["paths"].items()
+            if d
+            in COMMON_SCHEME_NAMES
+            | (frozenset() if runtime_metadata["in_venv"] else DISPARATE_SCHEME_NAMES)
+            and os.path.commonpath([runtime_metadata["prefix"], p]) != runtime_metadata["prefix"]
         ]
         if unoverridable_paths:
             raise ValueError("Scheme contains unoverridable paths", unoverridable_paths)
-    if not runtime_metadata["launcher_kind"]:
-        raise ValueError("Could not extract launcher kind")
 
 
 class CustomSchemeDictionaryDestination(SchemeDictionaryDestination):
     def __init__(self, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
-        self._skip_schemes = frozenset(s for s, v in self.scheme_dict.items() if v is SKIP)
+        self._skip_schemes = frozenset(
+            s for s, v in self.scheme_dict.items() if isinstance(v, Skip)
+        )
 
     def write_file(self, scheme: str, path: str | os.PathLike[str], stream: BinaryIO):
         if scheme in self._skip_schemes:
-            print(f"Skipping {scheme} file: '{path}'", file=sys.stderr)
+            log(f"Skipping {scheme} file: '{path}'", True)
         else:
             log(f"Writing {scheme} file: '{path}'")
             super().write_file(scheme, path, stream)
@@ -178,17 +185,18 @@ def main(argv: Sequence[str] | None = None):
         global LOGGING_ENABLED
         LOGGING_ENABLED = True
 
-    runtime_metadata = extract_python_runtime_metadata(args.interpreter, args.prefix)
+    runtime_metadata = extract_python_runtime_metadata(args.interpreter)
 
     log("Runtime metadata:")
     log(textwrap.indent(pprint.pformat(runtime_metadata), "  "))
     log("")
 
-    validate_runtime_metadata(runtime_metadata, args.prefix)
+    validate_runtime_metadata(runtime_metadata, args.prefix is not None)
 
     with WheelFile.open(args.wheel) as wheel:
         scheme = generate_wheel_scheme(
             runtime_metadata,
+            args.prefix,
             args.wheel,
             is_wheel_pure(wheel),
         )
