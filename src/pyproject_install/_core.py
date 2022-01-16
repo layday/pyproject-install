@@ -13,7 +13,6 @@ from typing import Any, BinaryIO
 from installer import install
 from installer.destinations import SchemeDictionaryDestination
 from installer.sources import WheelFile
-from installer.utils import parse_metadata_file, parse_wheel_filename
 
 from . import __version__
 
@@ -83,8 +82,7 @@ def extract_python_runtime_metadata(interpreter: str) -> dict[str, Any]:
 def generate_wheel_scheme(
     runtime_metadata: Mapping[str, Any],
     prefix: str | None,
-    wheel_filename: str,
-    wheel_is_pure: bool,
+    distribution: str,
 ):
     base_paths: Mapping[str, str] = runtime_metadata["paths"]
 
@@ -98,21 +96,14 @@ def generate_wheel_scheme(
     if runtime_metadata["in_venv"]:
         scheme["headers"] = SKIP_VENV_HEADERS
     else:
-        include_path = base_paths["include" if wheel_is_pure else "platinclude"]
+        include_path = base_paths["include"]
         if prefix is not None:
             include_path = os.path.join(
                 prefix, os.path.relpath(include_path, runtime_metadata["prefix"])
             )
-        distribution = parse_wheel_filename(wheel_filename).distribution
         scheme["headers"] = os.path.join(include_path, distribution)
 
     return scheme
-
-
-def is_wheel_pure(wheel_file: WheelFile):
-    stream = wheel_file.read_dist_info("WHEEL")
-    metadata = parse_metadata_file(stream)
-    return metadata["Root-Is-Purelib"] == "true"
 
 
 def validate_runtime_metadata(runtime_metadata: Mapping[str, Any], custom_prefix: bool):
@@ -199,8 +190,7 @@ def main(argv: Sequence[str] | None = None):
         scheme = generate_wheel_scheme(
             runtime_metadata,
             args.prefix,
-            args.wheel,
-            is_wheel_pure(wheel),
+            wheel.distribution,
         )
 
         log("Scheme:")

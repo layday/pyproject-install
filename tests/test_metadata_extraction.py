@@ -21,8 +21,7 @@ def test_generate_paths_outside_venv(
     paths = core.generate_wheel_scheme(
         runtime_metadata,
         None,
-        "foo-0.0.0-py3-none-any.whl",
-        True,
+        "foo",
     )
     assert paths.keys() == set(SCHEME_NAMES)
     assert all(paths[s] == base_paths[s] for s in {"purelib", "platlib", "scripts", "data"})
@@ -42,8 +41,7 @@ def test_generate_paths_inside_venv(
     paths = core.generate_wheel_scheme(
         runtime_metadata,
         None,
-        "foo-0.0.0-py3.none.any.whl",
-        True,
+        "foo",
     )
     assert paths.keys() == set(SCHEME_NAMES)
     assert all(
