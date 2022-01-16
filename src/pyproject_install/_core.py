@@ -5,7 +5,6 @@ from collections.abc import Mapping, Sequence
 import json
 import os
 import pprint
-import shutil
 import subprocess
 import sys
 import textwrap
@@ -154,7 +153,10 @@ class CustomSchemeDictionaryDestination(SchemeDictionaryDestination):
 
 
 def main(argv: Sequence[str] | None = None):
-    parser = argparse.ArgumentParser(description="Python wheel installer for the masses")
+    parser = argparse.ArgumentParser(
+        description="Python wheel installer for the masses",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
     parser.add_argument(
         "--verbose",
         action="store_true",
@@ -167,8 +169,8 @@ def main(argv: Sequence[str] | None = None):
     )
     parser.add_argument(
         "--interpreter",
-        default=shutil.which("python"),
-        help="path of Python interpreter; defaults to `which python`",
+        default=sys.executable,
+        help="path of Python interpreter; defaults to `sys.executable`",
     )
     parser.add_argument(
         "--prefix",
